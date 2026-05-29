@@ -4,10 +4,7 @@ const QRCode = require("qrcode");
 const express = require("express");
 const config = require("./config");
 
-// ═══════════════════════════════════
-//        WEB SERVER (Render er jonno)
-// ═══════════════════════════════════
-
+// Web Server (Render er jonno dorkar)
 const app = express();
 const PORT = process.env.PORT || 3000;
 let qrCodeData = "";
@@ -17,46 +14,29 @@ app.get("/", (req, res) => {
     res.send(`
         <html>
         <head>
-            <title>WhatsApp Welcome Bot</title>
+            <title>WhatsApp Bot</title>
             <meta http-equiv="refresh" content="10">
             <style>
-                body {
-                    font-family: Arial;
-                    text-align: center;
-                    background: #1a1a2e;
-                    color: white;
-                    padding: 50px;
-                }
-                .status {
-                    font-size: 24px;
-                    margin: 20px;
-                    color: #e94560;
-                }
+                body { font-family: Arial; text-align: center; background: #1a1a2e; color: white; padding: 50px; }
+                .status { font-size: 24px; margin: 20px; color: #e94560; }
                 img { border: 5px solid #e94560; border-radius: 10px; }
             </style>
         </head>
         <body>
             <h1>🤖 WhatsApp Welcome Bot</h1>
             <div class="status">Status: ${botStatus}</div>
-            ${qrCodeData ? `<img src="${qrCodeData}" />` : "<p>Loading QR Code...</p>"}
-            <p>Scan this QR with WhatsApp > Linked Devices</p>
+            ${qrCodeData ? `<img src="${qrCodeData}" />` : "<p>Loading...</p>"}
+            <p>WhatsApp > Linked Devices > Scan</p>
         </body>
         </html>
     `);
 });
 
-app.listen(PORT, () => {
-    console.log("Web server running on port " + PORT);
-});
+app.listen(PORT, () => console.log("Server on port " + PORT));
 
-// ═══════════════════════════════════
-//          BOT CLIENT
-// ═══════════════════════════════════
-
+// WhatsApp Client
 const client = new Client({
-    authStrategy: new LocalAuth({
-        dataPath: "./auth"
-    }),
+    authStrategy: new LocalAuth({ dataPath: "./auth" }),
     puppeteer: {
         headless: true,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
@@ -73,132 +53,87 @@ const client = new Client({
     }
 });
 
-// ═══════════════════════════════════
-//          QR CODE
-// ═══════════════════════════════════
-
+// QR Code
 client.on("qr", async function(qr) {
-    console.log("QR Code received! Check the web URL to scan.");
+    console.log("QR received! Open web URL to scan.");
     qrcode.generate(qr, { small: true });
-    
-    // Generate QR for web
     try {
         qrCodeData = await QRCode.toDataURL(qr);
         botStatus = "Scan QR Code below!";
     } catch (err) {
-        console.error("QR generation error:", err);
+        console.error("QR error:", err);
     }
 });
 
-// ═══════════════════════════════════
-//          BOT READY
-// ═══════════════════════════════════
-
+// Ready
 client.on("ready", function() {
-    console.log("✅ BOT IS ONLINE!");
-    botStatus = "✅ Bot is Online and Ready!";
+    console.log("BOT IS ONLINE!");
+    botStatus = "Bot is Online!";
     qrCodeData = "";
 });
 
-client.on("authenticated", function() {
+client.on("authenticated", () => {
     console.log("Authenticated!");
-    botStatus = "Authenticated! Loading...";
+    botStatus = "Authenticated!";
 });
 
-client.on("auth_failure", function(msg) {
+client.on("auth_failure", (msg) => {
     console.error("Auth failed:", msg);
-    botStatus = "❌ Authentication Failed!";
 });
 
-// ═══════════════════════════════════
-//     NEW MEMBER WELCOME
-// ═══════════════════════════════════
-
+// Welcome
 client.on("group_join", async function(notification) {
     try {
         var chat = await notification.getChat();
         var contact = await notification.getContact();
-        var memberName = contact.pushname || "New Member";
-        var memberNumber = contact.number;
-        var memberCount = chat.participants.length;
-
+        var name = contact.pushname || "New Member";
+        var number = contact.number;
+        var count = chat.participants.length;
         var now = new Date();
-        var welcomeMsg = config.welcomeMessage
-            .replace(/{name}/g, memberName)
-            .replace(/{number}/g, memberNumber)
+
+        var msg = config.welcomeMessage
+            .replace(/{name}/g, name)
+            .replace(/{number}/g, number)
             .replace(/{time}/g, now.toLocaleTimeString())
             .replace(/{date}/g, now.toLocaleDateString())
-            .replace(/{memberCount}/g, memberCount);
+            .replace(/{memberCount}/g, count);
 
-        await chat.sendMessage(welcomeMsg);
-        console.log("Welcome sent to: " + memberName);
+        await chat.sendMessage(msg);
+        console.log("Welcome sent: " + name);
     } catch (error) {
         console.error("Welcome error:", error);
     }
 });
 
-// ═══════════════════════════════════
-//     MEMBER LEAVE GOODBYE
-// ═══════════════════════════════════
-
+// Goodbye
 client.on("group_leave", async function(notification) {
     try {
         var chat = await notification.getChat();
         var contact = await notification.getContact();
-        var memberName = contact.pushname || "Member";
-
-        var goodbyeMsg = config.goodbyeMessage.replace(/{name}/g, memberName);
-        await chat.sendMessage(goodbyeMsg);
-        console.log("Goodbye sent: " + memberName);
+        var name = contact.pushname || "Member";
+        var msg = config.goodbyeMessage.replace(/{name}/g, name);
+        await chat.sendMessage(msg);
+        console.log("Goodbye sent: " + name);
     } catch (error) {
         console.error("Goodbye error:", error);
     }
 });
 
-// ═══════════════════════════════════
-//        COMMANDS
-// ═══════════════════════════════════
-
+// Commands
 client.on("message", async function(message) {
     var body = message.body.toLowerCase().trim();
-
-    if (body === "!ping") {
-        await message.reply("🏓 Pong! Bot is alive!");
-    }
-
-    if (body === "!help") {
-        var help = "*Commands*\n\n";
-        help += "!ping - Bot check\n";
-        help += "!help - This menu\n";
-        help += "!rules - Group rules";
-        await message.reply(help);
-    }
-
-    if (body === "!rules") {
-        var rules = "*Group Rules*\n\n";
-        rules += "1. Be respectful\n";
-        rules += "2. No spam\n";
-        rules += "3. Respect admins";
-        await message.reply(rules);
-    }
+    if (body === "!ping") await message.reply("Pong! Bot alive!");
+    if (body === "!help") await message.reply("Commands: !ping, !help, !rules");
+    if (body === "!rules") await message.reply("Rules: Be respectful, No spam!");
 });
 
-// ═══════════════════════════════════
-//        ERROR HANDLERS
-// ═══════════════════════════════════
-
-client.on("disconnected", function(reason) {
+// Errors
+client.on("disconnected", (reason) => {
     console.log("Disconnected:", reason);
-    botStatus = "Disconnected! Restarting...";
+    botStatus = "Disconnected!";
 });
 
-process.on("unhandledRejection", function(reason) {
-    console.error("Unhandled:", reason);
-});
-
-// ═══════════════════════════════════
-//        START
-// ═══════════════════════════════════
+process.on("unhandledRejection", (reason) => console.error("Error:", reason));
 
 console.log("Starting bot...");
 client.initialize();
